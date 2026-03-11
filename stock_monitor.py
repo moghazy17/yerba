@@ -8,8 +8,8 @@ load_dotenv()
 
 PRODUCTS_URL = "https://drinkyerbanow.com/products.json"
 TARGET_HANDLES = {
-    "pipore-yerba-mate-250g",
-    "wooden-cup-100-real-wood-torpedo",
+    # "pipore-yerba-mate-250g",
+    "wooden-cup-100-real-wood-torpedo"
 }
 
 EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
