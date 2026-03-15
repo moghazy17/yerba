@@ -1,6 +1,7 @@
 import os
 import smtplib
 import requests
+from bs4 import BeautifulSoup
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
 
@@ -12,9 +13,27 @@ TARGET_HANDLES = {
     "wooden-cup-100-real-wood-torpedo"
 }
 
+# Amazfit Helio Strap on Amazon AE — monitoring both variants
+# B0F8HJCB47: Helio Strap (Android)
+# B0F9J3TFMB: Helio Strap (Android & iPhone)
+AMAZON_AE_PRODUCTS = {
+    "B0F8HJCB47": "Amazfit Helio Strap (Amazon AE - Android)",
+    "B0F9J3TFMB": "Amazfit Helio Strap (Amazon AE - Android & iPhone)",
+}
+
 EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
 EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 NOTIFY_EMAIL = os.getenv("NOTIFY_EMAIL")
+
+AMAZON_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "en-AE,en;q=0.9",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+}
 
 
 def fetch_products():
@@ -55,11 +74,38 @@ def check_stock():
     return in_stock
 
 
+def check_amazon_ae_stock():
+    """Check availability of Helio Strap on Amazon AE. Returns list of available product names."""
+    available_items = []
+
+    for asin, name in AMAZON_AE_PRODUCTS.items():
+        url = f"https://www.amazon.ae/dp/{asin}"
+        try:
+            resp = requests.get(url, headers=AMAZON_HEADERS, timeout=30)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            availability_div = soup.find(id="availability")
+            add_to_cart = soup.find(id="add-to-cart-button")
+
+            if add_to_cart:
+                print(f"IN STOCK: {name}")
+                available_items.append(f"{name}: {url}")
+            elif availability_div and "currently unavailable" in availability_div.get_text().lower():
+                print(f"Currently unavailable: {name}")
+            else:
+                print(f"Status unclear (possible bot block): {name}")
+        except requests.RequestException as e:
+            print(f"Error checking {name}: {e}")
+
+    return available_items
+
+
 def send_email(in_stock):
     items = "\n".join(f"  - {name}" for name in in_stock)
-    body = f"The following products are back in stock on drinkyerbanow.com:\n\n{items}\n\nGo grab them!"
+    body = f"The following products are now available:\n\n{items}\n\nGo grab them!"
     msg = MIMEText(body)
-    msg["Subject"] = "Yerba Stock Alert: Items Available!"
+    msg["Subject"] = "Stock Alert: Items Available!"
     msg["From"] = EMAIL_ADDRESS
     msg["To"] = NOTIFY_EMAIL
 
@@ -72,9 +118,13 @@ def send_email(in_stock):
 
 if __name__ == "__main__":
     in_stock = check_stock()
-    if in_stock:
+    amazon_in_stock = check_amazon_ae_stock()
+
+    all_available = in_stock + amazon_in_stock
+
+    if all_available:
         if all([EMAIL_ADDRESS, EMAIL_APP_PASSWORD, NOTIFY_EMAIL]):
-            send_email(in_stock)
+            send_email(all_available)
         else:
             print("Email credentials not configured in .env — skipping notification.")
     else:
